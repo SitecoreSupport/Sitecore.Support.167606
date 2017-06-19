@@ -28,17 +28,13 @@
 
         IQueryable<TItem> IProviderSearchContext.GetQueryable<TItem>(params IExecutionContext[] executionContexts)
         {
-            if (queryMapperFieldInfo == null)
-            {
-                queryMapperFieldInfo = typeof(CloudIndex<TItem>).GetField("queryMapper",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                parametersFieldInfo = typeof(CloudIndex<TItem>).GetField("parameters",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-            }
+            queryMapperFieldInfo = typeof(CloudIndex<TItem>).GetField("queryMapper",
+                BindingFlags.Instance | BindingFlags.NonPublic);
             LinqToCloudIndex<TItem> linqToCloudIndex = new LinqToCloudIndex<TItem>(this, executionContexts);
-            if (queryMapperFieldInfo != null && parametersFieldInfo != null)
+
+            if (queryMapperFieldInfo != null)
             {
-                queryMapperFieldInfo.SetValue(linqToCloudIndex, new Sitecore.Support.Cloud.ContentSearch.Query.CloudQueryMapper((CloudIndexParameters)parametersFieldInfo.GetValue(linqToCloudIndex)));
+                queryMapperFieldInfo.SetValue(linqToCloudIndex, new Sitecore.Support.Cloud.ContentSearch.Query.CloudQueryMapper(linqToCloudIndex.Parameters));
             }
             if (this.Index.Locator.GetInstance<IContentSearchConfigurationSettings>().EnableSearchDebug())
             {
@@ -48,6 +44,5 @@
         }
 
         private FieldInfo queryMapperFieldInfo;
-        private FieldInfo parametersFieldInfo;
     }
 }
