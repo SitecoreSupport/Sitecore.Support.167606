@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Linq;
+using System.Reflection;
 
 namespace Sitecore.Support.Cloud.ContentSearch.Query
 {
@@ -74,9 +75,10 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
             return result;
         }
 
+        private static readonly FieldInfo wildcardSearchInfoFieldInfo;
         private static readonly MethodInfo cloudWildCardSearchMethodInfo;
         private static readonly MethodInfo constructFilterExpressionMethodInfo;
-        private static readonly MethodInfo constructWildcardExpressionnMethodInfo;
+
         static CloudQueryMapper()
         {
             cloudWildCardSearchMethodInfo =
@@ -85,9 +87,9 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
             constructFilterExpressionMethodInfo =
                 typeof(Sitecore.Cloud.ContentSearch.Query.CloudQueryMapper).GetMethod("ConstructFilterExpression",
                     BindingFlags.Static | BindingFlags.NonPublic);
-            constructWildcardExpressionnMethodInfo =
-                typeof(Sitecore.Cloud.ContentSearch.Query.CloudQueryMapper).GetMethod("ConstructWildcardExpression",
-                    BindingFlags.Static | BindingFlags.NonPublic);            
+            wildcardSearchInfoFieldInfo =
+                typeof(Sitecore.Cloud.ContentSearch.Query.CloudQueryMapper).GetField("wildcardSearchInfo",
+                    BindingFlags.Instance | BindingFlags.NonPublic);          
         }
         protected override string HandleOr(OrNode node, CloudQueryMapper.CloudQueryMapperState mappingState)
         {
@@ -123,14 +125,15 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
             }
             if (text.Contains("isWildcard") || (!string.IsNullOrEmpty(cloudQueryMapperState.FilterQuery) && cloudQueryMapperState.FilterQuery.Contains("isWildcard")))
             {
-                string text2 = (string)constructWildcardExpressionnMethodInfo.Invoke(this, new object[] {});
-                if (text.Contains("&search="))
+                string text2 = MyConstructWildcardExpression();
+                text = text.Replace("isWildcard", "");
+                if (!text.Contains("&search="))
                 {
-                    text = text2.Replace("&search=", text.Replace("isWildcard", "") + " ");
+                    text = "&search=" + text2 + text;
                 }
                 else
                 {
-                    text = text2 + text.Replace("isWildcard", "");
+                    text = text.Replace("&search=", "&search=(" + text2 + ") AND ");
                 }
                 if (!string.IsNullOrEmpty(cloudQueryMapperState.FilterQuery))
                 {
@@ -142,6 +145,17 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
                 text = CloudQueryMapper.ConstructFilterExpressionWithOperands(text, cloudQueryMapperState.FilterQuery, "AND");
             }
             return new CloudQuery(text, cloudQueryMapperState.AdditionalQueryMethods, cloudQueryMapperState.FacetQueries);
+        }
+
+        private string MyConstructWildcardExpression()
+        {
+            var wildcardSearchInfo = (IDictionary<string, string>) wildcardSearchInfoFieldInfo.GetValue(this);
+            if (wildcardSearchInfo == null || wildcardSearchInfo.Count == 0)
+            {
+                return string.Empty;
+            }
+            
+            return string.Join(" OR ", wildcardSearchInfo.Select(kvp => kvp.Key + ":" + kvp.Value));
         }
 
         private static string ConstructFilterExpressionWithOperands(string query1, string query2, string operand)
@@ -163,13 +177,11 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
                 }
                 else if (query1.Contains("&search=") && query2.Contains("&search="))
                 {
-                    query1 = query1.Replace("&queryType=full", "");
-                    query2 = query2.Replace("&queryType=full", "");
-                    text = string.Format("&search=(({0}){1}({2}))", query1.Replace("&search=", ""), operand, query2.Replace("&search=", ""));
-                    if (!text.Contains("queryType="))
-                    {
-                        text = "&queryType=full" + text;
-                    }
+                    text = string.Format("&search=(({0}){1}({2}))", query1.Replace("&search=", ""), operand.ToUpperInvariant(), query2.Replace("&search=", ""));
+                }
+                else
+                {
+                    text = string.Format("{0} {1} {2}", query1, operand.ToLowerInvariant(), query2.Replace("&$filter=", ""));
                 }
             }
             else if (string.IsNullOrEmpty(query1) && !string.IsNullOrEmpty(query2))
@@ -183,6 +195,10 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
             if (text.Contains("&$filter="))
             {
                 text = text.Replace("&$filter=", "&$filter=(") + ")";
+            }
+            if (!text.Contains("queryType=") && text.Contains("search="))
+            {
+                text = "&queryType=full" + text;
             }
             return text;
         }
