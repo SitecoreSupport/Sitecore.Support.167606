@@ -144,6 +144,10 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
             {
                 text = CloudQueryMapper.ConstructFilterExpressionWithOperands(text, cloudQueryMapperState.FilterQuery, "AND");
             }
+            if (!text.Contains("queryType=") && text.Contains("search="))
+            {
+                text = "&queryType=full" + text;
+            }
             return new CloudQuery(text, cloudQueryMapperState.AdditionalQueryMethods, cloudQueryMapperState.FacetQueries);
         }
 
@@ -195,10 +199,6 @@ namespace Sitecore.Support.Cloud.ContentSearch.Query
             if (text.Contains("&$filter="))
             {
                 text = text.Replace("&$filter=", "&$filter=(") + ")";
-            }
-            if (!text.Contains("queryType=") && text.Contains("search="))
-            {
-                text = "&queryType=full" + text;
             }
             return text;
         }
